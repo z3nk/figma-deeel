@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 type Screen = 'find' | 'detail' | 'upload' | 'credits' | 'review'
 type Item = { name: string; noDeal?: boolean; price: number; seen: number; pending?: boolean; allergens?: string[] | null; hot?: boolean; diet?: string[] }
 type Shop = {
-  id: string; name: string; walk: number; deal: number | null; loyalty?: string; loyaltyPrice?: number
+  id: string; lat: number; lng: number; name: string; walk: number; deal: number | null; loyalty?: string; loyaltyPrice?: number
   main: Item; snack: Item; drink: Item; why: string; quality: number
 }
 type Cat = 'main' | 'snack' | 'drink'
@@ -33,19 +33,19 @@ const catalogue: Record<string, Record<Cat, Item[]>> = {
 }
 
 const shops: Shop[] = [
-  { id: 'tesco', name: 'Tesco Express', walk: 4, deal: 3.85, loyalty: 'Clubcard', loyaltyPrice: 3.85, quality: 3, why: 'Cheapest, and the wrap is hot',
+  { id: 'tesco', lat: 51.5262, lng: -0.1347, name: 'Tesco Express', walk: 4, deal: 3.85, loyalty: 'Clubcard', loyaltyPrice: 3.85, quality: 3, why: 'Cheapest, and the wrap is hot',
     main: { name: 'Chicken wrap', price: 2.75, seen: 2, hot: true, allergens: ['gluten', 'milk'] },
     snack: { name: 'Walkers crisps', price: 1.0, seen: 2, allergens: ['milk'], diet: ['vegetarian'] },
     drink: { name: 'Coca-Cola 500ml', price: 1.2, seen: 2, allergens: [], diet: ['vegan'] } },
-  { id: 'sains', name: "Sainsbury's Local", walk: 6, deal: 4.0, loyalty: 'Nectar', quality: 3, why: 'Good veggie choice, short walk',
+  { id: 'sains', lat: 51.5229, lng: -0.1318, name: "Sainsbury's Local", walk: 6, deal: 4.0, loyalty: 'Nectar', quality: 3, why: 'Good veggie choice, short walk',
     main: { name: 'Falafel & houmous wrap', price: 3.0, seen: 9, allergens: ['gluten', 'sesame'], diet: ['vegan', 'vegetarian'] },
     snack: { name: 'Fruit pot', price: 1.25, seen: 9, allergens: [], diet: ['vegan'] },
     drink: { name: 'Innocent juice', price: 1.6, seen: 9, allergens: [], diet: ['vegan'] } },
-  { id: 'pret', name: 'Pret A Manger', walk: 3, deal: null, quality: 5, why: 'Closest, best quality, hot soup',
+  { id: 'pret', lat: 51.5236, lng: -0.1337, name: 'Pret A Manger', walk: 3, deal: null, quality: 5, why: 'Closest, best quality, hot soup',
     main: { name: 'Tomato soup', price: 3.95, seen: 1, hot: true, pending: true, allergens: null, diet: ['vegetarian'] },
     snack: { name: 'Banana', price: 0.6, seen: 1, allergens: [], diet: ['vegan'] },
     drink: { name: 'Filter coffee', price: 1.0, seen: 1, allergens: [], diet: ['vegan'] } },
-  { id: 'boots', name: 'Boots', walk: 8, deal: 4.5, quality: 2, why: 'Meal deal includes large drink',
+  { id: 'boots', lat: 51.5208, lng: -0.1345, name: 'Boots', walk: 8, deal: 4.5, quality: 2, why: 'Meal deal includes large drink',
     main: { name: 'Egg mayo sandwich', price: 2.8, seen: 16, allergens: ['gluten', 'egg', 'milk'], diet: ['vegetarian'] },
     snack: { name: 'Popchips', price: 1.1, seen: 16, allergens: [], diet: ['vegan'] },
     drink: { name: 'Water 750ml', price: 1.3, seen: 16, allergens: [], diet: ['vegan'] } },
@@ -202,6 +202,15 @@ function ItemFacts({ it, avoid }: { it: Item; avoid: string[] }) {
   </>
 }
 
+// Opens the device's own maps app: Apple Maps on iPhone/iPad/Mac, the default maps app on Android, Google Maps elsewhere
+function mapsUrl(shop: Shop) {
+  const ua = navigator.userAgent
+  const q = encodeURIComponent(shop.name)
+  if (/iPhone|iPad|iPod|Macintosh/.test(ua)) return `https://maps.apple.com/?daddr=${shop.lat},${shop.lng}&q=${q}&dirflg=w`
+  if (/Android/.test(ua)) return `geo:${shop.lat},${shop.lng}?q=${shop.lat},${shop.lng}(${q})`
+  return `https://www.google.com/maps/dir/?api=1&destination=${shop.lat},${shop.lng}&travelmode=walking`
+}
+
 function Detail({ shop, back, avoid }: { shop: Shop; back: () => void; avoid: string[] }) {
   const cats: [Cat, string][] = [['main', 'Main'], ['snack', 'Snack'], ['drink', 'Drink']]
   const options = (c: Cat) => [shop[c], ...catalogue[shop.id][c]]
@@ -218,7 +227,9 @@ function Detail({ shop, back, avoid }: { shop: Shop; back: () => void; avoid: st
   return (
     <div className="space-y-4">
       <Btn onClick={back}>← Back to results</Btn>
-      <div><h2 className="text-2xl font-bold">{shop.name}</h2><div className="text-sm text-muted">{shop.walk} min walk from campus · {shop.why}</div></div>
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3"><div><h2 className="text-2xl font-bold">{shop.name}</h2><div className="text-sm text-muted">{shop.walk} min walk from campus · {shop.why}</div></div>
+        <a href={mapsUrl(shop)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 self-start px-3 py-1.5 text-sm rounded-[6px] border border-primary bg-primary text-white font-semibold whitespace-nowrap">📍 Open in Maps</a>
+      </div>
       <div className="flex items-center justify-between"><div className="font-semibold">Your basket</div>{changed && <Btn onClick={() => setPick({ main: 0, snack: 0, drink: 0 })}>Reset to best basket</Btn>}</div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
         {cats.map(([c, k]) => {
