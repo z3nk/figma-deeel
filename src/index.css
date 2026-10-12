@@ -1,0 +1,19 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
+@import 'tailwindcss';
+
+@theme {
+  --color-primary: #0F7B5F;
+  --color-bg: #F7F7F4;
+  --color-card: #FFFFFF;
+  --color-ink: #1F2328;
+  --color-muted: #6B7280;
+  --color-line: #E3E3DE;
+  --color-fresh: #16A34A;
+  --color-ageing: #D97706;
+  --color-stale: #9CA3AF;
+  --color-unverified: #2563EB;
+  --font-sans: 'Source Sans 3', system-ui, sans-serif;
+}
+
+body { font-family: var(--font-sans); background: var(--color-bg); color: var(--color-ink); }
+input[type=range] { accent-color: var(--color-primary); }

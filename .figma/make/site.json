@@ -1,0 +1,11 @@
+{
+  "title": "deeel",
+  "description": "Helps students quickly find and compare nearby meal deals based on preferences like price, diet, and walking distance for fast lunch decisions.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
