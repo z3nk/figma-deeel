@@ -71,7 +71,7 @@ function Freshness({ days }: { days: number }) {
   return <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c}`}>● Seen {days} day{days === 1 ? '' : 's'} ago</span>
 }
 function Unverified() {
-  return <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-unverified">Unverified · awaiting review</span>
+  return <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-unverified">Unverified · team checking</span>
 }
 function Chip({ label, on, onClick, tone = 'diet' }: { label: string; on: boolean; onClick: () => void; tone?: 'diet' | 'allergen' }) {
   const active = tone === 'allergen' ? 'bg-red-600 text-white border-red-600' : 'bg-primary text-white border-primary'
@@ -177,7 +177,7 @@ function Find({ prefs, setPrefs, open, demo }: { prefs: Prefs; setPrefs: (p: Pre
   }
   return (
     <div className="space-y-4">
-      {demo === 'credited' && <Banner tone="success">🎉 +20 credits — your Tesco shelf photo was approved.</Banner>}
+      {demo === 'credited' && <Banner tone="success">🎉 +20 credits — our team approved your Pret soup photo</Banner>}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="text-sm text-muted">{ranked.length} shops within {prefs.walk} min · sponsors never affect ranking</div>
         <label className="flex items-center gap-2 text-sm"><span className="font-semibold">Sort by</span>
@@ -275,50 +275,113 @@ function Detail({ shop, back, avoid }: { shop: Shop; back: () => void; avoid: st
   )
 }
 
+type Outcome = 'accepted' | 'manual' | 'rejected'
+const CONF_THRESHOLD = 85
+
+function ConfidenceBar({ label, value, threshold }: { label: string; value: number; threshold?: number }) {
+  const c = threshold == null ? 'bg-primary' : value >= threshold ? 'bg-fresh' : 'bg-ageing'
+  return (
+    <div className="text-xs space-y-1">
+      <div className="flex justify-between"><span className="text-muted">{label}</span><span className="font-semibold">{value}%</span></div>
+      <div className="relative h-1.5 bg-gray-100 rounded-full"><div className={`h-full rounded-full ${c}`} style={{ width: `${value}%` }} />{threshold != null && <div className="absolute -top-0.5 h-2.5 w-px bg-ink" style={{ left: `${threshold}%` }} />}</div>
+    </div>
+  )
+}
+
+type Read = { name: string; price: string; deal: string; allergens: string; unsure?: boolean }
+const SHELF: Read[] = [
+  { name: 'Chicken wrap', price: '£2.75', deal: 'Meal deal £3.85 (Clubcard)', allergens: 'gluten, milk' },
+  { name: 'Ham & cheese sandwich', price: '£2.50', deal: 'Meal deal £3.85 (Clubcard)', allergens: 'gluten, milk' },
+  { name: 'Veg sushi box', price: '£3.25', deal: 'Meal deal £3.85 (Clubcard)', allergens: 'soy, sesame' },
+  { name: 'Chicken & bacon pasta', price: '£3.00', deal: 'Meal deal £3.85 (Clubcard)', allergens: 'gluten, egg' },
+  { name: 'BLT sandwich', price: '£2.95', deal: 'Not sure', allergens: 'Not on label', unsure: true },
+  { name: 'Steak bake', price: '£1.90', deal: 'Not in deal', allergens: 'gluten, milk' },
+]
+const TASKS = [
+  { shop: 'Tesco Express', item: 'BLT sandwich', need: 'Allergen info — not listed online', credits: 30, ask: 'Photo the back of the pack' },
+  { shop: 'Pret A Manger', item: 'Tomato soup', need: 'Allergen info — label had none', credits: 30, ask: 'Photo the ingredients on the lid' },
+  { shop: "Sainsbury's Local", item: 'Oat latte (can)', need: 'Price and allergens', credits: 20, ask: 'Photo the shelf label and can' },
+]
+
 function Upload({ demo }: { demo: string }) {
-  const [stage, setStage] = useState<'idle' | 'loading' | 'read' | 'failed' | 'sent'>('idle')
-  const st = demo === 'loading' ? 'loading' : demo === 'failed' ? 'failed' : stage
+  const [stage, setStage] = useState<'idle' | 'loading' | Outcome>('idle')
+  const [task, setTask] = useState<number | null>(null)
+  const [doneTasks, setDoneTasks] = useState<number[]>([])
+  const st = (['loading', 'accepted', 'manual', 'rejected'].includes(demo) ? demo : stage) as typeof stage
+  const run = (o: Outcome) => { setStage('loading'); setTimeout(() => { setStage(o); if (task != null && o !== 'rejected') { setDoneTasks(d => [...d, task]) } }, 1500) }
+  const t = task != null ? TASKS[task] : null
+  const items: Read[] = t ? [{ name: t.item, price: '£2.95', deal: 'Meal deal £3.85', allergens: 'gluten, milk, mustard', unsure: st === 'manual' }] : SHELF.map(r => ({ ...r, unsure: st === 'manual' && r.unsure }))
+  const credits = t ? t.credits : 5 * items.length
   return (
     <div className="space-y-4">
-      <div><h2 className="text-2xl font-bold">Add a photo</h2><div className="text-sm text-muted">Snap a shelf label. Earn credits once our team approves it.</div></div>
+      <div><h2 className="text-2xl font-bold">Add a photo</h2><div className="text-sm text-muted">Snap the whole shelf. We'll pick out every item, price and meal deal we can see.</div></div>
+      <Banner tone="info">If your photo is clear, you get credits straight away. If not, our team may take up to 24 hours to review it.</Banner>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card className="border-dashed border-2 text-center py-10 space-y-3">
-          <div className="text-3xl">📷</div><div className="font-semibold">Drag a photo here or browse</div><div className="text-xs text-muted">JPG or PNG, up to 10 MB</div>
-          <div className="flex gap-2 justify-center"><Btn kind="primary" onClick={() => { setStage('loading'); setTimeout(() => setStage('read'), 1500) }}>Upload photo</Btn><Btn onClick={() => setStage('failed')}>Try a blurry one</Btn></div>
+          <div className="text-3xl">📷</div>
+          {t ? <><div className="font-semibold">Task: {t.item} at {t.shop}</div><div className="text-sm text-muted">{t.ask}</div></>
+            : <><div className="font-semibold">Photo the whole shelf</div><div className="text-xs text-muted">Get labels, prices and deal signs in frame · JPG or PNG, up to 10 MB</div></>}
+          <div className="flex gap-2 justify-center"><Btn kind="primary" onClick={() => run('accepted')}>{t ? 'Upload product photo' : 'Upload shelf photo'}</Btn>{t && <Btn onClick={() => { setTask(null); setStage('idle') }}>Cancel task</Btn>}</div>
+          <div className="text-xs text-muted pt-2">Prototype outcomes</div>
+          <div className="flex gap-2 justify-center flex-wrap"><Btn onClick={() => run('accepted')}>Clear</Btn><Btn onClick={() => run('manual')}>Needs a check</Btn><Btn onClick={() => run('rejected')}>Blurry</Btn></div>
         </Card>
         <Card className="space-y-3">
-          <div className="font-semibold">What we read</div>
-          {st === 'idle' && <div className="text-sm text-muted">Upload a photo to see what we read from it.</div>}
+          <div className="font-semibold">What we found</div>
+          {st === 'idle' && <div className="text-sm text-muted">Upload a photo to see the items we pick out.</div>}
           {st === 'loading' && <div className="flex items-center gap-3 text-sm"><span className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />Reading your photo… you can keep browsing.</div>}
-          {st === 'failed' && <Banner tone="error"><b>We couldn't read this photo.</b> The price is blurred. Hold the phone steady and fill the frame with the label, then retake.<div className="mt-2"><Btn onClick={() => setStage('idle')}>Retake photo</Btn></div></Banner>}
-          {(st === 'read' || st === 'sent') && <>
-            <table className="text-sm w-full"><tbody>
-              {[['Shop', 'Tesco Express, Euston Rd'], ['Item', 'Chicken wrap'], ['Price', '£2.75'], ['Meal deal', 'Yes — £3.85 with Clubcard'], ['Allergens', 'gluten, milk'], ['Date seen', 'Today']].map(([k, v]) => <tr key={k} className="border-b border-line"><td className="py-1 text-muted">{k}</td><td className="py-1">{v}</td></tr>)}
-            </tbody></table>
-            {st === 'read' ? <Btn kind="primary" onClick={() => setStage('sent')}>Looks right — submit</Btn>
-              : <Banner tone="info"><b>Sent — awaiting review.</b> 0 credits for now; you'll get 20 credits when it's approved.</Banner>}
+          {st === 'rejected' && <Banner tone="error"><b>We couldn't read this photo — it's too blurry.</b> Hold the phone steady, step back so the labels are sharp, then retake.<div className="mt-2"><Btn onClick={() => setStage('idle')}>Retake photo</Btn></div></Banner>}
+          {(st === 'accepted' || st === 'manual') && <>
+            <div className="text-xs text-muted">{items.length} item{items.length > 1 ? 's' : ''} found{t ? '' : ' · Tesco Express, Euston Rd · today'}</div>
+            <div className="overflow-x-auto"><table className="text-sm w-full min-w-[420px]">
+              <thead className="text-left text-xs text-muted"><tr className="border-b border-line"><th className="py-1">Item</th><th>Price</th><th>Deal</th><th>Allergens</th></tr></thead>
+              <tbody>{items.map(r => <tr key={r.name} className="border-b border-line last:border-0"><td className="py-1.5">{r.name}{r.unsure && <span className="ml-1 text-xs font-semibold text-ageing">needs a check</span>}</td><td>{r.price}</td><td className="text-muted">{r.deal}</td><td className={r.allergens === 'Not on label' ? 'text-red-700 font-semibold' : ''}>{r.allergens}</td></tr>)}</tbody>
+            </table></div>
+            {st === 'accepted'
+              ? <Banner tone="success"><b>Published.</b> +{credits} credits added to your balance. It's live in results now.</Banner>
+              : <Banner tone="info"><b>Sent to our team to check.</b> Some details weren't clear enough. These items show as "Unverified" in results for now. 0 credits until approved — usually within 24 hours.</Banner>}
           </>}
         </Card>
+      </div>
+      <div className="space-y-2">
+        <div><div className="text-lg font-bold">Tasks</div><div className="text-sm text-muted">We need a closer photo of these products. Bonus credits for each.</div></div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+          {TASKS.map((k, i) => (
+            <Card key={k.item} className={`space-y-1.5 ${task === i ? 'border-primary border-2' : ''}`}>
+              <div className="flex justify-between items-start"><div className="font-semibold">{k.item}</div><span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-50 text-fresh">+{k.credits}</span></div>
+              <div className="text-xs text-muted">{k.shop}</div>
+              <div className="text-sm">Needed: {k.need}</div>
+              <div className="text-xs text-muted">{k.ask}</div>
+              <div className="pt-1">{doneTasks.includes(i) ? <span className="text-sm text-fresh font-semibold">Done ✓</span> : task === i ? <span className="text-sm text-primary font-semibold">Upload above ↑</span> : <Btn onClick={() => { setTask(i); setStage('idle') }}>Take photo</Btn>}</div>
+            </Card>
+          ))}
+        </div>
       </div>
     </div>
   )
 }
 
 function Credits() {
+  const hist: [string, string, string, string][] = [
+    ['Pret soup label', 'Awaiting team review', 'Being checked', '0'],
+    ['Tesco wrap label', 'Published', 'Credits paid instantly', '+20'],
+    ['Boots drink label', 'Not accepted', 'Too blurry', '0'],
+    ['Sainsbury\u2019s deal', 'Approved by team', 'Checked by our team', '+20'],
+    ['Tesco crisps label', 'Published', 'Credits paid instantly', '+20'],
+  ]
   return (
     <div className="space-y-4">
       <h2 className="text-2xl font-bold">My credits</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <Card><div className="text-sm text-muted">Paid balance</div><div className="text-3xl font-bold text-primary">140</div><div className="text-xs text-muted">Ready to spend</div></Card>
-        <Card className="bg-blue-50/40"><div className="text-sm text-muted">Awaiting review</div><div className="text-3xl font-bold text-unverified">2 photos</div><div className="text-xs text-muted">0 credits until approved</div></Card>
+        <Card><div className="text-sm text-muted">Paid balance</div><div className="text-3xl font-bold text-primary">140</div><div className="text-xs text-muted">Ready to spend · from published photos</div></Card>
+        <Card className="bg-blue-50/40"><div className="text-sm text-muted">Awaiting team review</div><div className="text-3xl font-bold text-unverified">1 photo</div><div className="text-xs text-muted">Our team is checking (up to 24 hours). 0 credits until approved.</div></Card>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card><div className="font-semibold mb-2">History</div><table className="text-sm w-full"><tbody>
-          {[['Pret soup label', 'Awaiting review', '0'], ['Tesco wrap label', 'Approved', '+20'], ['Boots drink label', 'Rejected — blurry', '0'], ['Sainsbury\u2019s deal', 'Approved', '+20']].map(r => <tr key={r[0]} className="border-b border-line"><td className="py-1.5">{r[0]}</td><td className="text-muted">{r[1]}</td><td className="text-right font-semibold">{r[2]}</td></tr>)}
+          {hist.map(r => <tr key={r[0]} className="border-b border-line"><td className="py-1.5">{r[0]}</td><td><div className={r[1].startsWith('Rejected') ? 'text-red-700' : r[1].startsWith('Awaiting') ? 'text-unverified' : 'text-fresh'}>{r[1]}</div><div className="text-xs text-muted">{r[2]}</div></td><td className="text-right font-semibold">{r[3]}</td></tr>)}
         </tbody></table></Card>
         <Card><div className="font-semibold mb-2">Rewards from sponsors</div>
-          {[['Free coffee', 'Sponsored by Campus Café', 100], ['£2 off a meal deal', 'Sponsored by Students’ Union', 150], ['Cinema ticket', 'Sponsored by Odeon', 400]].map(([n, s, c]) => (
-            <div key={n as string} className="flex items-center justify-between py-2 border-b border-line last:border-0"><div><div className="text-sm font-semibold">{n}</div><div className="text-xs text-muted">{s}</div></div><Btn kind={140 >= (c as number) ? 'primary' : 'secondary'}>{c} credits</Btn></div>
+          {[['Free coffee', 'Sponsored by Campus Café', 100], ['£2 off a meal deal', 'Sponsored by Students’ Union', 150], ['Cinema ticket', 'Sponsored by Odeon', 400]].map(([n, sp, c]) => (
+            <div key={n as string} className="flex items-center justify-between py-2 border-b border-line last:border-0"><div><div className="text-sm font-semibold">{n}</div><div className="text-xs text-muted">{sp}</div></div><Btn kind={140 >= (c as number) ? 'primary' : 'secondary'}>{c} credits</Btn></div>
           ))}</Card>
       </div>
     </div>
@@ -327,16 +390,28 @@ function Credits() {
 
 function Review() {
   const [done, setDone] = useState<Record<number, string>>({})
+  const queue = [
+    { shop: 'Pret A Manger', rec: 'Tomato soup £3.95', allergens: 'not on label', conf: 58, why: 'Item name partly covered by a sticker', user: 480 },
+    { shop: 'Tesco Express', rec: 'Meal deal £3.85 (Clubcard)', allergens: 'gluten, milk', conf: 71, why: 'Unsure if price is deal or single item', user: 481 },
+  ]
   return (
     <div className="space-y-4">
-      <h2 className="text-2xl font-bold">Review queue <span className="text-sm font-normal text-muted">(team only)</span></h2>
-      {[0, 1].map(i => (
+      <div>
+        <h2 className="text-2xl font-bold">Review queue <span className="text-sm font-normal text-muted">(team only)</span></h2>
+        <div className="text-sm text-muted">Only clear photos where the vision model's confidence was below {CONF_THRESHOLD}%. Blurry and confident photos are handled automatically.</div>
+      </div>
+      <div className="grid grid-cols-3 gap-4 text-center">
+        {[['Auto-published today', '42', 'text-fresh'], ['Auto-rejected today', '9', 'text-red-700'], ['Waiting for you', String(queue.length - Object.keys(done).length), 'text-unverified']].map(([l, v, c]) => <Card key={l} className="py-3"><div className={`text-2xl font-bold ${c}`}>{v}</div><div className="text-xs text-muted">{l}</div></Card>)}
+      </div>
+      {queue.map((q, i) => (
         <Card key={i}><div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
           <div className="h-40 rounded-[6px] border border-line bg-[repeating-linear-gradient(45deg,#f1f1ec,#f1f1ec_6px,#e9e9e3_6px,#e9e9e3_12px)] flex items-center justify-center text-xs text-muted">Uploaded photo</div>
           <div className="space-y-2 text-sm">
-            <div><b>{i ? 'Pret A Manger' : 'Tesco Express'}</b> · {i ? 'Tomato soup £3.95' : 'Meal deal £3.85'}</div>
-            <div className="text-muted">Allergens: {i ? 'not on label' : 'gluten, milk'} · uploaded by student #48{i}</div>
-            {done[i] ? <div className="font-semibold">{done[i]}</div> : <div className="flex gap-2"><Btn kind="primary" onClick={() => setDone({ ...done, [i]: 'Approved — 20 credits paid' })}>Approve</Btn><Btn kind="danger" onClick={() => setDone({ ...done, [i]: 'Rejected' })}>Reject</Btn></div>}
+            <div><b>{q.shop}</b> · {q.rec}</div>
+            <div className="text-muted">Allergens: {q.allergens} · uploaded by student #{q.user}</div>
+            <ConfidenceBar label="Model confidence" value={q.conf} threshold={CONF_THRESHOLD} />
+            <div className="text-xs text-ageing font-semibold">Why it was flagged: {q.why}</div>
+            {done[i] ? <div className="font-semibold">{done[i]}</div> : <div className="flex gap-2"><Btn kind="primary" onClick={() => setDone({ ...done, [i]: 'Approved — published, 20 credits paid' })}>Approve</Btn><Btn kind="danger" onClick={() => setDone({ ...done, [i]: 'Rejected — no credits' })}>Reject</Btn></div>}
           </div>
         </div></Card>
       ))}
@@ -354,7 +429,7 @@ export default function App() {
   const setPrefs = (p: Prefs) => setPrefsRaw({ ...p, touched: true })
   const toggle = (k: 'diets' | 'avoid', v: string) => setPrefs({ ...prefs, [k]: prefs[k].includes(v) ? prefs[k].filter(x => x !== v) : [...prefs[k], v] })
   const tabs: [Screen, string][] = [['find', 'Find'], ['upload', 'Add a photo'], ['credits', 'My credits'], ['review', 'Review queue']]
-  const states: Record<Screen, string[]> = { find: ['live', 'empty', 'noresults', 'credited'], detail: ['live'], upload: ['live', 'loading', 'failed'], credits: ['live'], review: ['live'] }
+  const states: Record<Screen, string[]> = { find: ['live', 'empty', 'noresults', 'credited'], detail: ['live'], upload: ['live', 'loading', 'accepted', 'manual', 'rejected'], credits: ['live'], review: ['live'] }
 
   return (
     <div className="min-h-screen flex flex-col md:flex-row">
