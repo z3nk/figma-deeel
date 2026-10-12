@@ -362,11 +362,11 @@ function Upload({ demo }: { demo: string }) {
 
 function Credits() {
   const hist: [string, string, string, string][] = [
-    ['Pret soup label', 'Awaiting team review', 'Being checked', '0'],
-    ['Tesco wrap label', 'Published', 'Credits paid instantly', '+20'],
-    ['Boots drink label', 'Not accepted', 'Too blurry', '0'],
-    ['Sainsbury\u2019s deal', 'Approved by team', 'Checked by our team', '+20'],
-    ['Tesco crisps label', 'Published', 'Credits paid instantly', '+20'],
+    ['Pret A Manger', 'Pending', 'Task (Tomato soup)', '0'],
+    ['Tesco Express', 'Approved', '6 items', '+30'],
+    ['Boots', 'Not accepted', '4 items', '0'],
+    ["Sainsbury's Local", 'Approved (manual)', '5 items', '+25'],
+    ['Tesco Express', 'Approved', 'Task (BLT sandwich)', '+30'],
   ]
   return (
     <div className="space-y-4">
@@ -377,7 +377,7 @@ function Credits() {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card><div className="font-semibold mb-2">History</div><table className="text-sm w-full"><tbody>
-          {hist.map(r => <tr key={r[0]} className="border-b border-line"><td className="py-1.5">{r[0]}</td><td><div className={r[1].startsWith('Rejected') ? 'text-red-700' : r[1].startsWith('Awaiting') ? 'text-unverified' : 'text-fresh'}>{r[1]}</div><div className="text-xs text-muted">{r[2]}</div></td><td className="text-right font-semibold">{r[3]}</td></tr>)}
+          {hist.map(r => <tr key={r[0] + r[2]} className="border-b border-line"><td className="py-1.5">{r[0]}</td><td><div className={r[1] === 'Not accepted' ? 'text-ageing' : r[1] === 'Pending' ? 'text-unverified' : 'text-fresh'}>{r[1]}</div><div className="text-xs text-muted">{r[2]}</div></td><td className="text-right font-semibold">{r[3]}</td></tr>)}
         </tbody></table></Card>
         <Card><div className="font-semibold mb-2">Rewards from sponsors</div>
           {[['Free coffee', 'Sponsored by Campus Café', 100], ['£2 off a meal deal', 'Sponsored by Students’ Union', 150], ['Cinema ticket', 'Sponsored by Odeon', 400]].map(([n, sp, c]) => (
