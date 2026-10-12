@@ -1,10 +1,35 @@
 import { useMemo, useState } from 'react'
 
 type Screen = 'find' | 'detail' | 'upload' | 'credits' | 'review'
-type Item = { name: string; price: number; seen: number; pending?: boolean; allergens?: string[] | null; hot?: boolean; diet?: string[] }
+type Item = { name: string; noDeal?: boolean; price: number; seen: number; pending?: boolean; allergens?: string[] | null; hot?: boolean; diet?: string[] }
 type Shop = {
   id: string; name: string; walk: number; deal: number | null; loyalty?: string; loyaltyPrice?: number
   main: Item; snack: Item; drink: Item; why: string; quality: number
+}
+type Cat = 'main' | 'snack' | 'drink'
+const I = (name: string, price: number, seen: number, allergens: string[] | null, diet: string[] = [], x: Partial<Item> = {}): Item => ({ name, price, seen, allergens, diet, ...x })
+// Alternatives in the meal deal plus other catalogued items (noDeal = not part of the deal)
+const catalogue: Record<string, Record<Cat, Item[]>> = {
+  tesco: {
+    main: [I('Ham & cheese sandwich', 2.5, 3, ['gluten', 'milk']), I('Veg sushi box', 3.25, 2, ['soy', 'sesame'], ['vegan', 'vegetarian']), I('Chicken & bacon pasta', 3.0, 5, ['gluten', 'egg']), I('Steak bake', 1.9, 1, ['gluten', 'milk'], [], { hot: true, noDeal: true })],
+    snack: [I('Fruit pot', 1.25, 2, [], ['vegan', 'vegetarian']), I('Cheese & crackers', 1.4, 4, ['gluten', 'milk'], ['vegetarian']), I('KitKat', 0.9, 8, null, [], { noDeal: true })],
+    drink: [I('Still water 500ml', 0.95, 2, [], ['vegan', 'vegetarian']), I('Tropicana orange', 1.6, 3, [], ['vegan', 'vegetarian']), I('Monster Energy', 1.85, 6, [], ['vegan'], { noDeal: true })],
+  },
+  sains: {
+    main: [I('Chicken Caesar wrap', 3.2, 9, ['gluten', 'milk', 'egg']), I('Tuna sweetcorn sandwich', 2.6, 10, ['gluten', 'egg'])],
+    snack: [I('Popcorn', 1.0, 9, [], ['vegan', 'vegetarian']), I('Yoghurt pot', 1.1, 9, ['milk'], ['vegetarian'])],
+    drink: [I('Coke Zero 500ml', 1.2, 9, [], ['vegan', 'vegetarian']), I('Oat latte (can)', 1.8, 11, null)],
+  },
+  pret: {
+    main: [I('Mac & cheese', 4.5, 1, ['gluten', 'milk'], ['vegetarian'], { hot: true }), I('Falafel salad', 4.25, 2, ['sesame'], ['vegan', 'vegetarian'])],
+    snack: [I('Dark choc almonds', 1.5, 1, ['nuts'], ['vegetarian']), I('Popcorn', 1.1, 3, [], ['vegan', 'vegetarian'])],
+    drink: [I('Still water', 0.9, 1, [], ['vegan', 'vegetarian']), I('Orange juice', 2.1, 1, [], ['vegan', 'vegetarian'])],
+  },
+  boots: {
+    main: [I('Chicken club sandwich', 3.0, 16, ['gluten', 'egg']), I('Veg pasta salad', 2.9, 17, ['gluten'], ['vegetarian'])],
+    snack: [I('Nakd bar', 1.0, 16, ['nuts'], ['vegan', 'vegetarian'])],
+    drink: [I('Coca-Cola 500ml', 1.3, 16, [], ['vegan', 'vegetarian'])],
+  },
 }
 
 const shops: Shop[] = [
@@ -169,29 +194,82 @@ function Find({ prefs, setPrefs, open, demo }: { prefs: Prefs; setPrefs: (p: Pre
   )
 }
 
+function ItemFacts({ it, avoid }: { it: Item; avoid: string[] }) {
+  return <>
+    <div className="flex gap-1 flex-wrap"><Freshness days={it.seen} />{it.pending && <Unverified />}{it.noDeal && <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-muted">Not in meal deal</span>}</div>
+    <div className="text-sm">{it.allergens == null ? <span className="text-red-700 font-semibold">⚠ Allergens not checked</span> : `Allergens: ${it.allergens.length ? it.allergens.join(', ') : 'none on label'}`}</div>
+    {it.allergens?.some(a => avoid.includes(a)) && <div className="text-sm text-red-700 font-semibold">Contains something you avoid</div>}
+  </>
+}
+
 function Detail({ shop, back, avoid }: { shop: Shop; back: () => void; avoid: string[] }) {
-  const s = sep(shop); const isDeal = shop.deal != null && shop.deal < s
-  const rows: [string, Item][] = [['Main', shop.main], ['Snack', shop.snack], ['Drink', shop.drink]]
+  const cats: [Cat, string][] = [['main', 'Main'], ['snack', 'Snack'], ['drink', 'Drink']]
+  const options = (c: Cat) => [shop[c], ...catalogue[shop.id][c]]
+  const [pick, setPick] = useState<Record<Cat, number>>({ main: 0, snack: 0, drink: 0 })
+  const [catTab, setCatTab] = useState<'all' | Cat>('all')
+  const [q, setQ] = useState('')
+  const chosen = cats.map(([c]) => options(c)[pick[c]])
+  const s = chosen.reduce((t, i) => t + i.price, 0)
+  const dealOk = shop.deal != null && chosen.every(i => !i.noDeal)
+  const isDeal = dealOk && shop.deal! < s
+  const changed = Object.values(pick).some(Boolean)
+  const all = cats.flatMap(([c, l]) => options(c).map((it, i) => ({ c, l, it, i })))
+    .filter(r => (catTab === 'all' || r.c === catTab) && r.it.name.toLowerCase().includes(q.toLowerCase()))
   return (
     <div className="space-y-4">
       <Btn onClick={back}>← Back to results</Btn>
       <div><h2 className="text-2xl font-bold">{shop.name}</h2><div className="text-sm text-muted">{shop.walk} min walk from campus · {shop.why}</div></div>
+      <div className="flex items-center justify-between"><div className="font-semibold">Your basket</div>{changed && <Btn onClick={() => setPick({ main: 0, snack: 0, drink: 0 })}>Reset to best basket</Btn>}</div>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 md:gap-6">
-        {rows.map(([k, it]) => (
-          <Card key={k} className="space-y-2">
-            <div className="text-xs uppercase tracking-wide text-muted font-semibold">{k}</div>
-            <div className="font-semibold">{it.name} {it.hot && <span className="text-xs text-ageing">· hot</span>}</div>
-            <div className="text-lg font-bold">{gbp(it.price)}</div>
-            <div className="h-28 rounded-[6px] border border-line bg-[repeating-linear-gradient(45deg,#f1f1ec,#f1f1ec_6px,#e9e9e3_6px,#e9e9e3_12px)] flex items-center justify-center text-xs text-muted">Label photo</div>
-            <div className="flex gap-1 flex-wrap"><Freshness days={it.seen} />{it.pending && <Unverified />}</div>
-            <div className="text-sm">{it.allergens == null ? <span className="text-red-700 font-semibold">⚠ Allergens not checked</span> : `Allergens: ${it.allergens.length ? it.allergens.join(', ') : 'none on label'}`}</div>
-            {it.allergens?.some(a => avoid.includes(a)) && <div className="text-sm text-red-700 font-semibold">Contains something you avoid</div>}
-          </Card>
-        ))}
+        {cats.map(([c, k]) => {
+          const it = options(c)[pick[c]]
+          return (
+            <Card key={c} className="space-y-2">
+              <div className="flex justify-between items-center"><div className="text-xs uppercase tracking-wide text-muted font-semibold">{k}</div>{pick[c] === 0 && <span className="text-xs text-primary font-semibold">Best pick</span>}</div>
+              <select className="w-full border border-line rounded-[6px] px-2 py-1.5 text-sm bg-white" value={pick[c]} onChange={e => setPick({ ...pick, [c]: +e.target.value })}>
+                {options(c).map((o, i) => <option key={o.name} value={i}>{o.name} — {gbp(o.price)}{i === 0 ? ' (best)' : ''}{o.noDeal ? ' · not in deal' : ''}</option>)}
+              </select>
+              <div className="flex justify-between items-baseline"><div className="font-semibold">{it.name} {it.hot && <span className="text-xs text-ageing">· hot</span>}</div><div className="text-lg font-bold">{gbp(it.price)}</div></div>
+              <div className="h-28 rounded-[6px] border border-line bg-[repeating-linear-gradient(45deg,#f1f1ec,#f1f1ec_6px,#e9e9e3_6px,#e9e9e3_12px)] flex items-center justify-center text-xs text-muted">Label photo</div>
+              <ItemFacts it={it} avoid={avoid} />
+            </Card>
+          )
+        })}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-        <Card className={isDeal ? 'border-primary border-2' : ''}><div className="text-sm text-muted">Meal deal price</div><div className="text-2xl font-bold">{shop.deal ? gbp(shop.deal) : 'No deal here'}</div>{isDeal && <div className="text-sm text-fresh font-semibold">Best option — saves {gbp(s - shop.deal!)}</div>}</Card>
+        <Card className={isDeal ? 'border-primary border-2' : ''}><div className="text-sm text-muted">Meal deal price</div><div className="text-2xl font-bold">{shop.deal == null ? 'No deal here' : dealOk ? gbp(shop.deal) : 'Not available'}</div>{isDeal && <div className="text-sm text-fresh font-semibold">Best option — saves {gbp(s - shop.deal!)}</div>}{shop.deal != null && !dealOk && <div className="text-sm text-muted">An item you picked isn't in the meal deal</div>}</Card>
         <Card className={!isDeal ? 'border-primary border-2' : ''}><div className="text-sm text-muted">Bought separately</div><div className="text-2xl font-bold">{gbp(s)}</div>{!isDeal && <div className="text-sm text-fresh font-semibold">Best option</div>}</Card>
+      </div>
+
+      <div className="pt-4 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div><div className="text-lg font-bold">Everything we've seen here</div><div className="text-xs text-muted">{cats.reduce((t, [c]) => t + options(c).length, 0)} items catalogued from student photos</div></div>
+          <input className="border border-line rounded-[6px] px-3 py-1.5 text-sm bg-white sm:w-56" placeholder="Search items" value={q} onChange={e => setQ(e.target.value)} />
+        </div>
+        <div className="flex gap-5 border-b border-line text-sm">
+          {(['all', 'main', 'snack', 'drink'] as const).map(t => <button key={t} onClick={() => setCatTab(t)} className={`pb-2 capitalize font-semibold border-b-2 ${catTab === t ? 'border-primary text-primary' : 'border-transparent text-muted'}`}>{t === 'all' ? 'All' : t + 's'}</button>)}
+        </div>
+        <Card className="p-0 overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
+            <thead className="text-left text-xs text-muted uppercase"><tr className="border-b border-line"><th className="p-3">Item</th><th>Type</th><th>Price</th><th>Allergens (from label)</th><th>Seen</th><th></th></tr></thead>
+            <tbody>
+              {all.map(({ c, l, it, i }) => {
+                const inBasket = pick[c] === i
+                return (
+                  <tr key={c + it.name} className={`border-b border-line last:border-0 ${it.seen > 14 ? 'opacity-50' : ''}`}>
+                    <td className="p-3"><div className="flex items-center gap-2"><Thumb label="Label" /><div><div className="font-semibold">{it.name}</div><div className="flex gap-1 mt-0.5">{it.hot && <span className="text-xs text-ageing">hot</span>}{it.noDeal && <span className="text-xs text-muted">not in deal</span>}{it.pending && <Unverified />}</div></div></div></td>
+                    <td>{l}</td>
+                    <td className="font-semibold">{gbp(it.price)}</td>
+                    <td>{it.allergens == null ? <span className="text-red-700 font-semibold">Not checked</span> : it.allergens.length ? it.allergens.join(', ') : 'None listed'}{it.allergens?.some(a => avoid.includes(a)) && <span className="text-red-700 font-semibold"> · avoid</span>}</td>
+                    <td><Freshness days={it.seen} /></td>
+                    <td className="pr-3 text-right">{inBasket ? <span className="text-xs text-primary font-semibold">In basket</span> : <Btn onClick={() => setPick({ ...pick, [c]: i })}>Swap in</Btn>}</td>
+                  </tr>
+                )
+              })}
+              {all.length === 0 && <tr><td colSpan={6} className="p-6 text-center text-muted">No items match "{q}"</td></tr>}
+            </tbody>
+          </table>
+        </Card>
       </div>
     </div>
   )
@@ -314,7 +392,7 @@ export default function App() {
           {tabs.map(([k, l]) => <button key={k} onClick={() => { setScreen(k); setDemo('live') }} className={`pb-2 text-sm font-semibold border-b-2 ${screen === k || (k === 'find' && screen === 'detail') ? 'border-primary text-primary' : 'border-transparent text-muted'}`}>{l}</button>)}
         </nav>
         {screen === 'find' && <Find prefs={prefs} setPrefs={setPrefs} demo={demo} open={id => { setShopId(id); setScreen('detail') }} />}
-        {screen === 'detail' && <Detail shop={shops.find(s => s.id === shopId)!} avoid={prefs.avoid} back={() => setScreen('find')} />}
+        {screen === 'detail' && <Detail key={shopId} shop={shops.find(s => s.id === shopId)!} avoid={prefs.avoid} back={() => setScreen('find')} />}
         {screen === 'upload' && <Upload demo={demo} />}
         {screen === 'credits' && <Credits />}
         {screen === 'review' && <Review />}
